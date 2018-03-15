@@ -60,7 +60,7 @@ architecture rtl of top is
       GRAPH_MEM_ADDR_WIDTH : natural := 32;
       TEXT_MEM_DATA_WIDTH  : natural := 32;
       GRAPH_MEM_DATA_WIDTH : natural := 32;
-      RES_TYPE             : integer := 1;
+      RES_TYPE             : integer := 5;
       MEM_SIZE             : natural := 4800
       );
     port (
@@ -156,7 +156,14 @@ architecture rtl of top is
   signal dir_blue            : std_logic_vector(7 downto 0);
   signal dir_pixel_column    : std_logic_vector(10 downto 0);
   signal dir_pixel_row       : std_logic_vector(10 downto 0);
+  signal help_s				  : std_logic_vector(23 downto 0);
 
+
+	signal char_address_next : std_logic_vector(MEM_ADDR_WIDTH-1 downto 0); --signal for register
+  signal base : std_logic_vector(13 downto 0); --1 sec enable for graph mem
+  signal cnt : std_logic_vector(23 downto 0); --1 sec enable for graph mem
+	signal base1 : std_logic_vector(13 downto 0); --1 sec enable for txt mem
+  signal cnt1 : std_logic_vector(23 downto 0); --1 sec enable for txt mem
 begin
 
   -- calculate message lenght from font size
@@ -168,11 +175,11 @@ begin
   graphics_lenght <= conv_std_logic_vector(MEM_SIZE*8*8, GRAPH_MEM_ADDR_WIDTH);
   
   -- removed to inputs pin
-  direct_mode <= '1';
-  display_mode     <= "10";  -- 01 - text mode, 10 - graphics mode, 11 - text & graphics
+  direct_mode <= '0';
+  display_mode     <= "11";  -- 01 - text mode, 10 - graphics mode, 11 - text & graphics
   
   font_size        <= x"1";
-  show_frame       <= '1';
+  show_frame       <= '0';
   foreground_color <= x"FFFFFF";
   background_color <= x"000000";
   frame_color      <= x"FF0000";
@@ -250,16 +257,155 @@ begin
   --dir_red
   --dir_green
   --dir_blue
- 
+   help_s <= "111111111111111111111111" when (dir_pixel_column < H_RES/8) else
+				 "111111111111111111111111" when (dir_pixel_column <  H_RES/8*2) else
+				 "111100011101100001111101" when (dir_pixel_column <  H_RES/8*3) else
+				 "111000101111111111111111" when (dir_pixel_column <  H_RES/8*4) else
+				 "111111111000000111111111" when (dir_pixel_column <  H_RES/8*5) else
+				 "111111111111111100000111" when (dir_pixel_column < H_RES/8*6) else
+				 "100001111111111111111111" when (dir_pixel_column <  H_RES/8*7) else
+			    "000000000000000000000000" when (dir_pixel_column <  H_RES);
+dir_red <= help_s(23 downto 16);
+dir_green <= help_s(15 downto 8);
+dir_blue <= help_s(7 downto 0);			 
   -- koristeci signale realizovati logiku koja pise po TXT_MEM
   --char_address
   --char_value
   --char_we
-  
+  char_we <= '1';
+
+	--register
+	process(pix_clock_s, reset_n_i)
+	begin
+		if reset_n_i = '0' then
+			char_address <= (others => '0');
+			base1 <= (others => '0');
+			cnt1 <= (others => '0');
+		elsif rising_edge(pix_clock_s) then
+			if cnt1 < 2000000 then
+				cnt1 <= cnt1+1;
+				base1 <= base1;
+			else
+				base1 <= base1 + 1;
+				cnt1 <= (others=>'0');
+			end if;
+			if char_address < 4800 then
+				char_address <= char_address + 1;
+			else
+				char_address <= base1; --<=base
+			end if;
+		end if;
+	end process;
+	
+	char_value <= "010011" when char_address = 1+base1 else 
+					  "000101" when char_address = 2+base1 else 
+					  "000010" when char_address = 3+base1 else 
+					  "000001" when char_address = 4+base1 else 
+					  "100000"; --space
   -- koristeci signale realizovati logiku koja pise po GRAPH_MEM
   --pixel_address
   --pixel_value
   --pixel_we
+  pixel_we <= '1';
+  
+  process(pix_clock_s, reset_n_i)
+	begin
+		if reset_n_i = '0' then
+			pixel_address <= (others => '0');
+			cnt <= (others=>'0');
+			base <= (others=>'0');
+		elsif rising_edge(pix_clock_s) then
+			if cnt = 2000000 then
+				if base < 20 then
+					base <= base +1;
+				else
+				   base <= (others => '0');
+				end if;
+				
+				cnt <= (others=>'0');
+			else
+				cnt <= cnt+1;
+			end if;
+				
+				
+			if pixel_address < 9600 then
+				pixel_address <= pixel_address + 1;
+			else
+				pixel_address <= (others => '0');
+			end if;
+		end if;
+	end process;
+  
+
+	pixel_value <= 
+						(others=>'1') when pixel_address >= 208*20+base and pixel_address <= 208*20+base+1 else
+						(others=>'1') when pixel_address >= 209*20+base and pixel_address <= 209*20+base+1 else
+						(others=>'1') when pixel_address >= 210*20+base and pixel_address <= 210*20+base+1 else
+						(others=>'1') when pixel_address >= 211*20+base and pixel_address <= 211*20+base+1 else
+						(others=>'1') when pixel_address >= 212*20+base and pixel_address <= 212*20+base+1 else
+						(others=>'1') when pixel_address >= 213*20+base and pixel_address <= 213*20+base+1 else
+						(others=>'1') when pixel_address >= 214*20+base and pixel_address <= 214*20+base+1 else
+						(others=>'1') when pixel_address >= 215*20+base and pixel_address <= 215*20+base+1 else
+						(others=>'1') when pixel_address >= 216*20+base and pixel_address <= 216*20+base+1 else
+						(others=>'1') when pixel_address >= 217*20+base and pixel_address <= 217*20+base+1 else
+						(others=>'1') when pixel_address >= 218*20+base and pixel_address <= 218*20+base+1 else
+						(others=>'1') when pixel_address >= 219*20+base and pixel_address <= 219*20+base+1 else
+						(others=>'1') when pixel_address >= 220*20+base and pixel_address <= 220*20+base+1 else
+						(others=>'1') when pixel_address >= 221*20+base and pixel_address <= 221*20+base+1 else
+						(others=>'1') when pixel_address >= 222*20+base and pixel_address <= 222*20+base+1 else
+						(others=>'1') when pixel_address >= 223*20+base and pixel_address <= 223*20+base+1 else
+						(others=>'1') when pixel_address >= 224*20+base and pixel_address <= 224*20+base+1 else
+						(others=>'1') when pixel_address >= 225*20+base and pixel_address <= 225*20+base+1 else
+						(others=>'1') when pixel_address >= 226*20+base and pixel_address <= 226*20+base+1 else
+						(others=>'1') when pixel_address >= 227*20+base and pixel_address <= 227*20+base+1 else
+						(others=>'1') when pixel_address >= 228*20+base and pixel_address <= 228*20+base+1 else
+						(others=>'1') when pixel_address >= 229*20+base and pixel_address <= 229*20+base+1 else
+						(others=>'1') when pixel_address >= 230*20+base and pixel_address <= 230*20+base+1 else
+						(others=>'1') when pixel_address >= 231*20+base and pixel_address <= 231*20+base+1 else
+						(others=>'1') when pixel_address >= 232*20+base and pixel_address <= 232*20+base+1 else
+						(others=>'1') when pixel_address >= 233*20+base and pixel_address <= 233*20+base+1 else
+						(others=>'1') when pixel_address >= 234*20+base and pixel_address <= 234*20+base+1 else
+						(others=>'1') when pixel_address >= 235*20+base and pixel_address <= 235*20+base+1 else
+						(others=>'1') when pixel_address >= 236*20+base and pixel_address <= 236*20+base+1 else
+						(others=>'1') when pixel_address >= 237*20+base and pixel_address <= 237*20+base+1 else
+						(others=>'1') when pixel_address >= 238*20+base and pixel_address <= 238*20+base+1 else
+						(others=>'1') when pixel_address >= 239*20+base and pixel_address <= 239*20+base+1 else
+						(others=>'1') when pixel_address >= 240*20+base and pixel_address <= 240*20+base+1 else
+						(others=>'1') when pixel_address >= 241*20+base and pixel_address <= 241*20+base+1 else
+						(others=>'1') when pixel_address >= 242*20+base and pixel_address <= 242*20+base+1 else
+						(others=>'1') when pixel_address >= 243*20+base and pixel_address <= 243*20+base+1 else
+						(others=>'1') when pixel_address >= 244*20+base and pixel_address <= 244*20+base+1 else
+						(others=>'1') when pixel_address >= 245*20+base and pixel_address <= 245*20+base+1 else
+						(others=>'1') when pixel_address >= 246*20+base and pixel_address <= 246*20+base+1 else
+						(others=>'1') when pixel_address >= 247*20+base and pixel_address <= 247*20+base+1 else
+						(others=>'1') when pixel_address >= 248*20+base and pixel_address <= 248*20+base+1 else
+						(others=>'1') when pixel_address >= 249*20+base and pixel_address <= 249*20+base+1 else
+						(others=>'1') when pixel_address >= 250*20+base and pixel_address <= 250*20+base+1 else
+						(others=>'1') when pixel_address >= 251*20+base and pixel_address <= 251*20+base+1 else
+						(others=>'1') when pixel_address >= 252*20+base and pixel_address <= 252*20+base+1 else
+						(others=>'1') when pixel_address >= 253*20+base and pixel_address <= 253*20+base+1 else
+						(others=>'1') when pixel_address >= 254*20+base and pixel_address <= 254*20+base+1 else
+						(others=>'1') when pixel_address >= 255*20+base and pixel_address <= 255*20+base+1 else
+						(others=>'1') when pixel_address >= 256*20+base and pixel_address <= 256*20+base+1 else
+						(others=>'1') when pixel_address >= 257*20+base and pixel_address <= 257*20+base+1 else
+						(others=>'1') when pixel_address >= 258*20+base and pixel_address <= 258*20+base+1 else
+						(others=>'1') when pixel_address >= 259*20+base and pixel_address <= 259*20+base+1 else
+						(others=>'1') when pixel_address >= 260*20+base and pixel_address <= 260*20+base+1 else
+						(others=>'1') when pixel_address >= 261*20+base and pixel_address <= 261*20+base+1 else
+						(others=>'1') when pixel_address >= 262*20+base and pixel_address <= 262*20+base+1 else
+						(others=>'1') when pixel_address >= 263*20+base and pixel_address <= 263*20+base+1 else
+						(others=>'1') when pixel_address >= 264*20+base and pixel_address <= 264*20+base+1 else
+						(others=>'1') when pixel_address >= 265*20+base and pixel_address <= 265*20+base+1 else
+						(others=>'1') when pixel_address >= 266*20+base and pixel_address <= 266*20+base+1 else
+						(others=>'1') when pixel_address >= 267*20+base and pixel_address <= 267*20+base+1 else
+						(others=>'1') when pixel_address >= 268*20+base and pixel_address <= 268*20+base+1 else
+						(others=>'1') when pixel_address >= 269*20+base and pixel_address <= 269*20+base+1 else
+						(others=>'1') when pixel_address >= 270*20+base and pixel_address <= 270*20+base+1 else
+						(others=>'1') when pixel_address >= 271*20+base and pixel_address <= 271*20+base+1 else
+						(others=>'1') when pixel_address >= 272*20+base and pixel_address <= 272*20+base+1 else
+						(others=>'0');
+  
+  
   
   
 end rtl;
